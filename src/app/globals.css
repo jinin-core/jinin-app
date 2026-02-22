@@ -1,26 +1,74 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --color-neon-pink: #FF00FF;
+  --color-neon-cyan: #00FFFF;
+  --color-cyber-black: #050505;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --animate-glitch: glitch 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+  
+  @keyframes glitch {
+    0% { transform: translate(0) }
+    20% { transform: translate(-2px, 2px) }
+    40% { transform: translate(-2px, -2px) }
+    60% { transform: translate(2px, 2px) }
+    80% { transform: translate(2px, -2px) }
+    100% { transform: translate(0) }
   }
+}
+
+:root {
+  --background: #000000;
+  --foreground: #ededed;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* AI Watermark Hiding Hack Class */
+.ai-watermark-hide-wrapper {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.ai-watermark-hide-wrapper::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 15%; /* Adjust depending on watermark size */
+  background: linear-gradient(to bottom, transparent, #000000);
+  pointer-events: none;
+}
+
+.ai-watermark-hide-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  transform: scale(1.1) translateY(5%);
+}
+
+/* Neon Glow Utilities */
+.text-glow-pink {
+  text-shadow: 0 0 5px #FF00FF, 0 0 10px #FF00FF, 0 0 20px #FF00FF;
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 5px #00FFFF, 0 0 10px #00FFFF, 0 0 20px #00FFFF;
+}
+
+.box-glow-pink {
+  box-shadow: 0 0 10px #FF00FF, 0 0 20px #FF00FF, inset 0 0 10px #FF00FF;
+}
+
+.box-glow-cyan {
+  box-shadow: 0 0 10px #00FFFF, 0 0 20px #00FFFF, inset 0 0 10px #00FFFF;
 }
