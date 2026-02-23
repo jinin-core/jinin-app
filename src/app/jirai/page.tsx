@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import html2canvas from "html2canvas";
+import { toJpeg } from "html-to-image";
 import { NeonButton } from "@/components/NeonButton";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SwipeCard } from "@/components/SwipeCard";
@@ -27,7 +27,7 @@ const QUESTIONS = [
 
 // Result Types (16 MBTI-style combinations)
 // Result Types (16 MBTI-style combinations)
-const RESULTS = [
+export const RESULTS = [
     { code: "LTCS", title: "完全無欠のサイボーグ", subtitle: "LTCS", catchphrase: "え、なんで怒ってるの？恋愛のバグに気づかない超ドライ人間。", image: "/jirai/ltcs.png", description: "相手のSNSや位置情報に全く興味がなく、自分の時間は自分のものというスタンス。束縛を嫌い、サバサバしていますが、感情の起伏が少なすぎて相手からは「本当に私のこと好きなの？」と不安がられることもしばしば。地雷度は限りなくゼロに近いレアキャラです。", color: "cyan", bestMatch: "HSMB", worstMatch: "HTCS" },
     { code: "LTCB", title: "絶対零度のスナイパー", subtitle: "LTCB", catchphrase: "熱しやすく冷めやすい。一瞬の萎えで全てをシャットダウン。", image: "/jirai/ltcb.png", description: "相手のちょっとした言動やダサい部分を見た瞬間、一瞬で「蛙化現象」を起こして愛情がマイナスに振り切れます。昨日まであんなに好きだったのに、翌日には「無理、触らないで」と冷酷に切り捨てる、ある意味で一番恐ろしいタイプです。", color: "cyan", bestMatch: "HSCS", worstMatch: "HTMB" },
     { code: "LTMS", title: "匂わせの錬金術師", subtitle: "LTMS", catchphrase: "直接は言わない。LINEのBGMとストーリーで全てを察してほしい。", image: "/jirai/ltms.png", description: "不満や病み感情を直接言葉で伝えるのは「負け」だと思っています。その代わり、意味深なポエムや曲の歌詞、アイコンの変更などを駆使して間接的なアピールを行い、相手の罪悪感をじわじわと煽る天才です。", color: "pink", bestMatch: "LSCS", worstMatch: "HTMS" },
@@ -317,18 +317,18 @@ export default function JiraiDiagnosisPage() {
             // Give a slight delay for DOM to settle
             await new Promise(r => setTimeout(r, 100));
 
-            const canvas = await html2canvas(element, {
-                scale: 1, // 1 is sufficient as the card is already 1080x1920
-                useCORS: true,
-                allowTaint: true,
+            const dataUrl = await toJpeg(element, {
+                quality: 0.85,
                 backgroundColor: "#050505",
-                windowWidth: 1080,
-                windowHeight: 1920,
+                canvasWidth: 1080,
+                canvasHeight: 1920,
+                style: {
+                    transform: 'scale(1)',
+                    transformOrigin: 'top left'
+                }
             });
 
             element.style.cssText = originalStyle;
-
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
             const result = getResult();
             const fileName = `jinin_${result.code}.jpg`;
@@ -391,9 +391,37 @@ export default function JiraiDiagnosisPage() {
                 <p className="text-gray-400 text-center mb-12 max-w-xs text-sm">
                     あなたの心の奥底に潜む「メンヘラ・地雷」要素を、直感的なスワイプで暴き出します。
                 </p>
-                <NeonButton color="pink" onClick={handleStart} className="w-full max-w-xs">
+                <NeonButton color="pink" onClick={handleStart} className="w-full max-w-xs mb-8">
                     診断を始める
                 </NeonButton>
+
+                {/* Affiliate Block on START page */}
+                <div className="w-full max-w-xs mt-4 mb-6">
+                    <div className="text-center mb-3">
+                        <span className="inline-block px-2 py-0.5 border border-gray-700 bg-black text-[10px] font-bold text-gray-500 rounded mb-1">PR</span>
+                        <p className="text-[11px] text-gray-400 font-bold leading-relaxed">
+                            あなたの『隠れ地雷』要素をプロが深掘り。<br />
+                            ココナラのメール占いで個別に相談できます。
+                        </p>
+                    </div>
+                    <a
+                        href="https://px.a8.net/svt/ejp?a8mat=4AXI0C+AINPIQ+2PEO+1BQYPV"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                            // GA4: Track affiliate click from start page
+                            if (typeof window !== 'undefined' && (window as any).gtag) {
+                                (window as any).gtag('event', 'click_coconala_ad_start');
+                            }
+                        }}
+                        className="relative flex items-center justify-center p-3 bg-[#0a0a0a] border-2 border-neon-cyan rounded-xl hover:bg-[#111] transition-all w-full group overflow-hidden box-glow-cyan"
+                    >
+                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(0,255,255,0.2) 1px, transparent 1px)', backgroundSize: '100% 4px' }}></div>
+                        <span className="relative z-10 font-black text-white text-[12px] leading-tight flex flex-col items-center">
+                            <span className="text-neon-cyan text-[14px] border-b border-neon-cyan/50 pb-0.5 tracking-wide text-glow-cyan">プロの占い師に詳しく相談する</span>
+                        </span>
+                    </a>
+                </div>
             </div>
         );
     }
@@ -584,7 +612,7 @@ export default function JiraiDiagnosisPage() {
                         {result.title}
                     </h1>
                     <h2 className="text-xl font-bold text-white mb-2">
-                        地雷度: <span className={`text-4xl ml-1 ${isPink ? "text-neon-pink drop-shadow-[0_0_8px_#FF00FF]" : "text-neon-cyan drop-shadow-[0_0_8px_#00FFFF]"}`}>{yesPercentage}%</span>
+                        地雷度: <span className={`text-4xl ml-1 ${isPink ? "text-neon-pink" : "text-neon-cyan"}`} style={{ filter: `drop-shadow(0 0 8px ${isPink ? '#FF00FF' : '#00FFFF'})` }}>{yesPercentage}%</span>
                     </h2>
                     <p className="text-[#ededed] text-sm px-6 font-bold leading-relaxed mb-2 opacity-90 drop-shadow-md">
                         {result.catchphrase}
@@ -691,7 +719,7 @@ export default function JiraiDiagnosisPage() {
                         </button>
 
                         <button onClick={copyUrl} className="flex items-center justify-center space-x-2 py-3 bg-transparent border border-gray-800 hover:border-gray-500 rounded-lg text-gray-400 hover:text-white font-bold transition-all text-xs">
-                            <span className="text-xs">URLを直接コピー</span>
+                            <span className="text-xs">隠れ地雷度診断のURLをコピー</span>
                         </button>
                     </div>
 
@@ -710,7 +738,11 @@ export default function JiraiDiagnosisPage() {
                 {/* Compatibility Modal */}
                 {matchModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md" onClick={() => setMatchModal(null)}>
-                        <div className="bg-[#0a0a0a] border border-gray-800 shadow-[0_0_30px_rgba(0,0,0,0.8)] rounded-2xl w-full max-w-sm p-6 relative overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div
+                            className="bg-[#0a0a0a] border border-gray-800 rounded-2xl w-full max-w-sm p-6 relative overflow-hidden"
+                            style={{ boxShadow: '0 0 30px rgba(0,0,0,0.8)' }}
+                            onClick={e => e.stopPropagation()}
+                        >
                             <button onClick={() => setMatchModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white bg-black/50 rounded-full p-1 border border-gray-800">
                                 <X size={20} />
                             </button>
@@ -719,7 +751,7 @@ export default function JiraiDiagnosisPage() {
                                 const isBest = matchModal === "best";
                                 return (
                                     <div className="text-center mt-2">
-                                        <p className={`text-xs font-bold mb-2 ${isBest ? "text-neon-pink drop-shadow-[0_0_5px_#FF00FF]" : "text-neon-cyan drop-shadow-[0_0_5px_#00FFFF]"}`}>
+                                        <p className={`text-xs font-bold mb-2 ${isBest ? "text-neon-pink" : "text-neon-cyan"}`} style={{ filter: `drop-shadow(0 0 5px ${isBest ? '#FF00FF' : '#00FFFF'})` }}>
                                             {isBest ? "▶ 最高の相性" : "▶ 最悪の相性"}
                                         </p>
                                         <h3 className="text-xl font-black text-white mb-2">{modalData?.title}</h3>
@@ -745,11 +777,15 @@ export default function JiraiDiagnosisPage() {
                 {/* Native Share Fallback Modal */}
                 {shareModalImage && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md" onClick={() => setShareModalImage(null)}>
-                        <div className="bg-[#0a0a0a] border border-gray-800 shadow-[0_0_40px_rgba(255,0,255,0.4)] rounded-2xl w-full max-w-sm p-6 relative flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                        <div
+                            className="bg-[#0a0a0a] border border-gray-800 rounded-2xl w-full max-w-sm p-6 relative flex flex-col items-center"
+                            style={{ boxShadow: '0 0 40px rgba(255,0,255,0.4)' }}
+                            onClick={e => e.stopPropagation()}
+                        >
                             <button onClick={() => setShareModalImage(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white bg-black/50 rounded-full p-2 border border-gray-800 transition-colors">
                                 <X size={20} />
                             </button>
-                            <h3 className="text-lg font-black text-neon-pink mb-2 text-center animate-pulse drop-shadow-[0_0_5px_rgba(255,0,255,0.8)]">画像を長押しして保存</h3>
+                            <h3 className="text-lg font-black text-neon-pink mb-2 text-center animate-pulse text-glow-pink">画像を長押しして保存</h3>
                             <p className="text-xs text-gray-300 text-center mb-6 leading-relaxed">
                                 あなたの端末では直接シェアがサポートされていません。<br />
                                 以下の画像を<strong>「写真に追加（保存）」</strong>してから、InstagramやTikTokでシェアしてね📸✨
@@ -806,10 +842,8 @@ export default function JiraiDiagnosisPage() {
                                     style={{
                                         backgroundImage: `url(${base64Avatar || result.image})`,
                                         backgroundSize: 'cover',
-                                        backgroundPosition: 'top center',
+                                        backgroundPosition: 'center',
                                         backgroundRepeat: 'no-repeat',
-                                        transform: 'scale(1.15)',
-                                        transformOrigin: 'top center'
                                     }}
                                 />
                             </div>
