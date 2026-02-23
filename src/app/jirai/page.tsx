@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { toJpeg } from "html-to-image";
+import html2canvas from "html2canvas";
 import { NeonButton } from "@/components/NeonButton";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SwipeCard } from "@/components/SwipeCard";
@@ -73,6 +73,7 @@ export default function JiraiDiagnosisPage() {
     const [base64Avatar, setBase64Avatar] = useState<string>("");
     const [base64Logo, setBase64Logo] = useState<string>("");
     const [startTime, setStartTime] = useState<string>("");
+    const [shareModalImage, setShareModalImage] = useState<string | null>(null);
 
     useEffect(() => {
         // Enforce an aggressive top-scroll alignment to combat Safari's scroll retention on React re-renders.
@@ -145,9 +146,10 @@ export default function JiraiDiagnosisPage() {
     useEffect(() => {
         if (appState === "RESULT") {
             const result = getResult();
+            const baseUrl = window.location.origin;
 
             // Prefetch Avatar
-            fetch(result.image)
+            fetch(`${baseUrl}${result.image}`)
                 .then(res => res.blob())
                 .then(blob => {
                     const reader = new FileReader();
@@ -157,7 +159,7 @@ export default function JiraiDiagnosisPage() {
                 .catch(err => console.error("Avatar fetch error:", err));
 
             // Prefetch Top Logo
-            fetch("/jinin_logo.png")
+            fetch(`${baseUrl}/jinin_logo.png`)
                 .then(res => res.blob())
                 .then(blob => {
                     const reader = new FileReader();
@@ -292,41 +294,79 @@ export default function JiraiDiagnosisPage() {
         window.open(url, "_blank");
     };
 
-    const downloadImage = async () => {
+    const handleNativeShare = async () => {
+        // GA4: Track share event
+        if (typeof window !== 'undefined' && (window as any).gtag) {
+            (window as any).gtag('event', 'share_result');
+        }
+
         const element = document.getElementById("share-card");
         if (!element) return;
 
         try {
             setIsGenerating(true);
 
-            // WebKit Safari Hack: Force a throwaway render pass. 
-            // iOS Safari lazily decodes image assets inside the cloned DOM of html-to-image 
-            // and drops them on the first pass to save memory.
-            try {
-                await Promise.race([
-                    toJpeg(element, { width: 10, height: 10, quality: 0.1 }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 500))
-                ]);
-            } catch (e) { /* ignore */ }
+            // html2canvas workaround: Temporarily move the element onto the screen so it isn't cropped or ignored by iOS WebKit
+            const originalStyle = element.style.cssText;
+            element.style.position = 'fixed';
+            element.style.top = '0';
+            element.style.left = '0';
+            element.style.zIndex = '-9999';
+            element.style.transform = 'none';
 
-            const dataUrl = await toJpeg(element, {
-                quality: 0.85,
-                pixelRatio: 1, // Crucial for iOS Safari memory limits. Do not use 2.
+            // Give a slight delay for DOM to settle
+            await new Promise(r => setTimeout(r, 100));
+
+            const canvas = await html2canvas(element, {
+                scale: 1, // 1 is sufficient as the card is already 1080x1920
+                useCORS: true,
+                allowTaint: true,
                 backgroundColor: "#050505",
-                style: {
-                    transform: "scale(1)",
-                    transformOrigin: "top left"
-                }
+                windowWidth: 1080,
+                windowHeight: 1920,
             });
 
-            const link = document.createElement("a");
-            link.href = dataUrl;
+            element.style.cssText = originalStyle;
+
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
             const result = getResult();
-            link.download = `jinin_${result.code}.png`;
-            link.click();
+            const fileName = `jinin_${result.code}.jpg`;
+
+            // Safe Blob conversion that avoids "Failed to fetch data: URL" bugs in WebKit WebViews
+            const byteString = atob(dataUrl.split(',')[1]);
+            const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            const blob = new Blob([ab], { type: mimeString });
+            const file = new File([blob], fileName, { type: mimeString });
+
+            const shareData = {
+                title: 'JININ - 隠れ地雷度診断',
+                text: `私の地雷タイプは【${result.title}】でした！\n「${result.catchphrase}」\n#JININ #隠れ地雷度診断\nhttps://jinin.example.com/jirai`,
+                files: [file]
+            };
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share(shareData);
+                } catch (err) {
+                    if ((err as Error).name !== "AbortError") {
+                        // User cancelled share, don't show fallback, unless it's a real error
+                        setShareModalImage(dataUrl);
+                    }
+                }
+            } else {
+                // Fallback Modal for Desktop / Unsupported environments
+                setShareModalImage(dataUrl);
+            }
         } catch (err) {
-            console.error("画像生成エラー:", err);
-            alert("画像の保存に失敗しました。");
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error("画像生成エラー:", errorMessage);
+            alert(`画像シェアの準備に失敗しました。\n詳細: ${errorMessage}`);
         } finally {
             setIsGenerating(false);
         }
@@ -596,15 +636,50 @@ export default function JiraiDiagnosisPage() {
                 {/* Actions Region */}
                 <div className="px-6 space-y-4 flex-grow flex flex-col justify-end mt-auto">
 
+                    {/* Affiliate Block (MOVED HIGHER FOR VISIBILITY) */}
+                    <div className="mb-6 pt-2 pb-2 px-2">
+                        <div className="text-center mb-4">
+                            <span className="inline-block px-2 py-0.5 border border-gray-700 bg-black text-[10px] font-bold text-gray-500 rounded mb-2">PR</span>
+                            <p className="text-[13px] text-gray-300 font-bold leading-relaxed drop-shadow-md">
+                                あなたの『隠れ地雷』要素をプロが深掘り。<br />
+                                今ならココナラのメール占いで、<br />
+                                誰にも言えない悩みを個別に相談できます。
+                            </p>
+                        </div>
+                        <a
+                            href="https://px.a8.net/svt/ejp?a8mat=4AXI0C+AINPIQ+2PEO+1BQYPV"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                                // GA4: Track affiliate click
+                                if (typeof window !== 'undefined' && (window as any).gtag) {
+                                    (window as any).gtag('event', 'click_coconala_ad');
+                                }
+                            }}
+                            className="relative flex items-center justify-center p-4 bg-[#0a0a0a] border-[3px] border-neon-cyan rounded-xl hover:bg-[#111] transition-all w-full group overflow-hidden box-glow-cyan"
+                        >
+                            {/* Scanning line animation overlay pattern */}
+                            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(0,255,255,0.2) 1px, transparent 1px)', backgroundSize: '100% 4px' }}></div>
+
+                            <span className="relative z-10 font-black text-white text-[14px] leading-tight flex flex-col items-center">
+                                <span className="text-gray-200 text-xs mb-1 font-bold">診断結果を元に、</span>
+                                <span className="text-neon-cyan text-[15px] border-b-2 border-neon-cyan/50 pb-0.5 tracking-wide text-glow-cyan">プロの占い師に詳しく相談する</span>
+                            </span>
+                        </a>
+                    </div>
+
                     {/* Primary Share Actions */}
                     <div className="flex flex-col space-y-3 mb-2">
                         <button
-                            onClick={downloadImage}
-                            disabled={isGenerating}
-                            className={`flex items-center justify-center space-x-2 py-4 bg-gradient-to-r from-neon-pink/20 to-purple-600/20 border-2 border-neon-pink rounded-xl text-white font-black tracking-wide transition-all shadow-[0_0_15px_rgba(255,0,255,0.3)] hover:shadow-[0_0_25px_rgba(255,0,255,0.6)] group ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onClick={handleNativeShare}
+                            disabled={isGenerating || !base64Avatar || !base64Logo}
+                            className={`flex items-center justify-center space-x-2 py-4 bg-[#1f0a1f] border-2 border-neon-pink rounded-xl text-white font-black tracking-wide transition-all box-glow-pink hover:bg-[#3f1f3f] group ${(isGenerating || !base64Avatar || !base64Logo) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            <Download size={20} className={isGenerating ? 'animate-bounce' : 'group-hover:animate-bounce'} />
-                            <span>{isGenerating ? '画像生成中...' : '📸 診断結果を画像で保存'}</span>
+                            <Share2 size={20} className={(isGenerating || !base64Avatar || !base64Logo) ? '' : 'group-hover:animate-bounce'} />
+                            <span>
+                                {(!base64Avatar || !base64Logo) ? '画像準備中...' :
+                                    isGenerating ? '画像生成中...' : '📸 結果をシェアする'}
+                            </span>
                         </button>
 
                         <button
@@ -620,20 +695,6 @@ export default function JiraiDiagnosisPage() {
                         </button>
                     </div>
 
-                    <div className="pt-4 border-t border-gray-800 mt-2">
-                        <a
-                            href="https://example.com/affiliate-link"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center p-4 bg-gradient-to-r from-[#FF00FF]/20 to-[#00FFFF]/20 border border-gray-700 rounded-xl hover:bg-[#FF00FF]/30 transition-colors w-full group"
-                        >
-                            <LinkIcon size={18} className="text-white mr-2 group-hover:animate-pulse" />
-                            <span className="font-bold text-white tracking-wide">相性の良い人を探す</span>
-                        </a>
-                        <p className="text-center text-[10px] text-gray-600 mt-2 font-mono">
-                            PR // SPONSORED MATCHING SERVICE
-                        </p>
-                    </div>
 
                     {/* Return Navigation */}
                     <div className="pt-4 flex flex-col space-y-3 mt-4">
@@ -668,7 +729,7 @@ export default function JiraiDiagnosisPage() {
                                             {modalData?.image && (
                                                 <Image src={modalData.image} alt={modalData.title} fill className="object-cover object-top opacity-80" />
                                             )}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                                            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))' }}></div>
                                         </div>
 
                                         <p className="text-xs text-gray-400 text-left leading-relaxed">
@@ -681,44 +742,112 @@ export default function JiraiDiagnosisPage() {
                     </div>
                 )}
 
+                {/* Native Share Fallback Modal */}
+                {shareModalImage && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md" onClick={() => setShareModalImage(null)}>
+                        <div className="bg-[#0a0a0a] border border-gray-800 shadow-[0_0_40px_rgba(255,0,255,0.4)] rounded-2xl w-full max-w-sm p-6 relative flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => setShareModalImage(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white bg-black/50 rounded-full p-2 border border-gray-800 transition-colors">
+                                <X size={20} />
+                            </button>
+                            <h3 className="text-lg font-black text-neon-pink mb-2 text-center animate-pulse drop-shadow-[0_0_5px_rgba(255,0,255,0.8)]">画像を長押しして保存</h3>
+                            <p className="text-xs text-gray-300 text-center mb-6 leading-relaxed">
+                                あなたの端末では直接シェアがサポートされていません。<br />
+                                以下の画像を<strong>「写真に追加（保存）」</strong>してから、InstagramやTikTokでシェアしてね📸✨
+                            </p>
+                            <div className="relative w-full aspect-[9/16] rounded-xl overflow-hidden border-2 border-neon-cyan shadow-lg mb-4 bg-black">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={shareModalImage} alt="Share Result" className="w-full h-full object-contain" />
+                            </div>
+                            <button onClick={() => setShareModalImage(null)} className="w-full py-4 bg-[#111] hover:bg-[#222] border border-gray-700 rounded-xl text-white font-bold transition-all text-sm">
+                                閉じる
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Hidden Share Card for Instagram / TikTok (9:16 Aspect Ratio) */}
                 <div className="absolute top-[-9999px] left-[-9999px] -z-50 opacity-100 pointer-events-none overflow-hidden">
                     <div
                         id="share-card"
-                        className="w-[1080px] h-[1920px] bg-[#050505] text-white p-16 flex flex-col items-center justify-center font-sans z-0"
+                        className="w-[1080px] h-[1920px] bg-[#050505] text-white p-16 flex flex-col items-center justify-between font-sans z-0 relative"
                     >
-                        <div className="relative z-10 w-full flex-grow flex flex-col items-center justify-center py-12 gap-y-12">
+                        {/* Background Elements - Using safe rgba/hex instead of space-separated gradients or modern color specs */}
+                        <div className="absolute inset-0 z-0 opacity-50" style={{ background: 'radial-gradient(ellipse at center, rgba(255,0,255,0.15) 0%, rgba(0,0,0,0) 70%)' }}></div>
+                        <div className="absolute inset-0 z-0 opacity-40" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,0.03) 2px, transparent 2px)', backgroundSize: '60px 60px' }}></div>
+
+                        <div className="relative z-10 w-full flex-grow flex flex-col items-center justify-center pt-12 pb-8 gap-y-12">
                             {/* Logo */}
-                            <div className="w-[400px] relative flex flex-col items-center">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={base64Logo || "/jinin_logo.png"} alt="JININ" className="w-full object-contain" />
-                                <p className="text-[20px] text-neon-cyan font-mono font-black tracking-[0.5em] mt-4">#隠れ地雷度診断</p>
+                            <div className="w-[450px] relative flex flex-col items-center mt-8">
+                                <div
+                                    className="w-full h-[150px]"
+                                    style={{
+                                        backgroundImage: `url(${base64Logo || "/jinin_logo.png"})`,
+                                        backgroundSize: 'contain',
+                                        backgroundPosition: 'center',
+                                        backgroundRepeat: 'no-repeat',
+                                        filter: 'drop-shadow(0px 0px 20px rgba(0,255,255,0.3))'
+                                    }}
+                                />
+                                <p
+                                    className="text-[24px] text-neon-cyan font-mono font-black tracking-[0.6em] mt-6"
+                                    style={{ filter: 'drop-shadow(0px 0px 8px rgba(0,255,255,0.8))' }}
+                                >
+                                    #隠れ地雷度診断
+                                </p>
                             </div>
 
                             {/* Character Image */}
-                            <div className="relative w-[700px] h-[700px] shrink-0 rounded-full overflow-hidden bg-[#0A0A0A] z-20 border-8 border-gray-900 border-b-neon-pink flex items-center justify-center">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={base64Avatar || result.image} alt={result.title} className="w-[110%] h-[110%] object-cover object-top" />
+                            <div
+                                className="relative w-[750px] h-[750px] shrink-0 rounded-full overflow-hidden bg-[#0A0A0A] z-20 border-[12px] border-gray-900 border-b-neon-pink"
+                                style={{ boxShadow: '0px 0px 80px rgba(255,0,255,0.4)' }}
+                            >
+                                <div
+                                    className="w-full h-full"
+                                    style={{
+                                        backgroundImage: `url(${base64Avatar || result.image})`,
+                                        backgroundSize: 'cover',
+                                        backgroundPosition: 'top center',
+                                        backgroundRepeat: 'no-repeat',
+                                        transform: 'scale(1.15)',
+                                        transformOrigin: 'top center'
+                                    }}
+                                />
                             </div>
 
                             {/* Result Title */}
-                            <div className="text-center px-16">
-                                <h1 className="text-6xl font-black mb-6 leading-tight text-neon-pink">
+                            <div className="text-center px-12 mt-4">
+                                <h1
+                                    className="text-7xl font-black mb-8 leading-tight text-neon-pink"
+                                    style={{ filter: 'drop-shadow(0px 0px 15px rgba(255,0,255,0.6))' }}
+                                >
                                     {result.title}
                                 </h1>
-                                <div className="inline-block px-10 py-5 bg-[#111] border-4 border-gray-800 rounded-full shadow-2xl">
-                                    <p className="text-3xl font-bold text-gray-300">
-                                        地雷度 <span className="text-5xl ml-4 font-black text-neon-pink">{yesPercentage}%</span>
+                                <div
+                                    className="inline-block px-12 py-6 bg-[#111] border-[6px] border-gray-800 rounded-full"
+                                    style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}
+                                >
+                                    <p className="text-4xl font-bold text-gray-300">
+                                        地雷度 <span className="text-6xl ml-6 font-black text-neon-pink">{yesPercentage}%</span>
                                     </p>
                                 </div>
                             </div>
 
                             {/* Footer (Catchphrase) */}
-                            <div className="w-full text-center px-16">
-                                <p className="text-3xl font-bold leading-[1.8] text-gray-300 whitespace-pre-wrap break-words">
+                            <div className="w-full text-center px-16 mt-6">
+                                <p
+                                    className="text-4xl font-bold leading-[1.8] text-gray-200 whitespace-pre-wrap break-words"
+                                    style={{ filter: 'drop-shadow(0 10px 8px rgba(0,0,0,0.4))' }}
+                                >
                                     {result.catchphrase}
                                 </p>
                             </div>
+                        </div>
+
+                        {/* Bottom URL Bar */}
+                        <div className="relative z-10 w-full mb-8 pt-8 border-t-[3px] border-gray-800 flex flex-col items-center justify-center">
+                            <p className="text-[32px] font-mono font-bold text-gray-400 tracking-widest">
+                                https://jinin.example.com/jirai
+                            </p>
                         </div>
                     </div>
                 </div>
