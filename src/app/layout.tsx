@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://jinin.example.com'),
-  title: "JININ - 隠れ地雷度診断",
+  title: "JININ - DIAGNOSIS PLATFORM",
   description: "あなたの本当の姿を浮き彫りにする、サイバーパンクな自己診断プラットフォーム。",
   openGraph: {
-    title: "JININ - 隠れ地雷度診断",
-    description: "誰も知らない「私」を、自認する。サイバーパンクな16タイプの地雷度診断アプリ。",
+    title: "JININ - DIAGNOSIS PLATFORM",
+    description: "誰も知らない「私」を、自認する。サイバーパンクな自己診断プラットフォーム。",
     url: "https://jinin.example.com/",
     siteName: "JININ",
     images: [
@@ -35,8 +35,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "JININ - 隠れ地雷度診断",
-    description: "誰も知らない「私」を、自認する。サイバーパンクな16タイプの地雷度診断アプリ。",
+    title: "JININ - DIAGNOSIS PLATFORM",
+    description: "誰も知らない「私」を、自認する。サイバーパンクな自己診断プラットフォーム。",
     images: ["/jirai/cyber_general.png"],
   },
 };
@@ -47,12 +47,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-cyber-black text-[#ededed] h-[100dvh] w-full overflow-hidden`}
       >
-        <main className="max-w-md min-h-0 w-full h-full mx-auto flex flex-col relative shadow-2xl border-x border-gray-900 bg-black overflow-y-auto overflow-x-hidden overscroll-none">
+        <main className="max-w-2xl min-h-0 w-full h-full mx-auto flex flex-col relative shadow-2xl border-x border-gray-900 bg-black overflow-y-auto overflow-x-hidden overscroll-none">
           {/* Global Analog TV Noise Overlay */}
           <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.06] mix-blend-screen" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
           {children}

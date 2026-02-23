@@ -57,6 +57,7 @@ export default function JiraiDiagnosisPage() {
     const [birthYear, setBirthYear] = useState<string>("");
     const [birthMonth, setBirthMonth] = useState<string>("");
     const [birthDay, setBirthDay] = useState<string>("");
+    const [mbti, setMbti] = useState<string>("");
     const [isGenerating, setIsGenerating] = useState(false);
     const [base64Avatar, setBase64Avatar] = useState<string>("");
     const [base64Logo, setBase64Logo] = useState<string>("");
@@ -170,6 +171,11 @@ export default function JiraiDiagnosisPage() {
             return;
         }
 
+        if (!mbti) {
+            alert("MBTIを選択してください。（わからない場合は「わからない」を選択可能です）");
+            return;
+        }
+
         const result = getResult();
         const now = new Date();
 
@@ -207,7 +213,8 @@ export default function JiraiDiagnosisPage() {
                 q10: !!answers[9],
                 q11: !!answers[10],
                 q12: !!answers[11],
-                resultType: result.title
+                resultType: result.title,
+                mbti: mbti || "未回答"
             }
         };
 
@@ -381,7 +388,7 @@ export default function JiraiDiagnosisPage() {
                 <div className="w-full max-w-sm mb-6 text-center animate-pulse">
                     <p className="font-mono text-neon-cyan text-xs tracking-widest mb-1">ANALYZING...</p>
                     <h2 className="text-lg font-bold text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
-                        より正確な結果を出すために<br />教えてください
+                        傾向分析のために教えてください
                     </h2>
                 </div>
 
@@ -466,6 +473,31 @@ export default function JiraiDiagnosisPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* MBTI Selection */}
+                    <div className="bg-black border border-gray-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 to-gray-600 opacity-50"></div>
+                        <h3 className="text-sm font-bold text-gray-300 mb-3 flex items-center justify-between">
+                            <span className="flex items-center"><span className="text-neon-pink mr-2">▶</span> MBTI<span className="text-[10px] text-gray-500 ml-2">※わからない場合は「わからない」を選択</span></span>
+                        </h3>
+                        <div className="relative w-full">
+                            <select
+                                value={mbti}
+                                onChange={(e) => setMbti(e.target.value)}
+                                className={`w-full appearance-none py-3 pl-3 pr-6 rounded-lg text-xs font-bold transition-all outline-none ${mbti
+                                    ? "bg-neon-pink/20 border-2 border-neon-pink text-white box-glow-pink"
+                                    : "bg-[#111] border border-gray-700 text-gray-400 focus:border-neon-cyan"
+                                    }`}
+                            >
+                                <option value="" disabled>MBTIを選択してください</option>
+                                <option value="わからない">わからない</option>
+                                {["ISTJ", "ISFJ", "INFJ", "INTJ", "ISTP", "ISFP", "INFP", "INTP", "ESTP", "ESFP", "ENFP", "ENTP", "ESTJ", "ESFJ", "ENFJ", "ENTJ"].map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-xs">▼</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="w-full max-w-md mt-8 pb-8">
@@ -517,7 +549,7 @@ export default function JiraiDiagnosisPage() {
                             src={result.image}
                             alt={result.title}
                             fill
-                            className="ai-watermark-hide-img"
+                            className="ai-watermark-hide-img object-cover object-top md:object-[center_10%]"
                             priority
                         />
                     </div>
@@ -595,7 +627,7 @@ export default function JiraiDiagnosisPage() {
 
                     {/* Return Navigation */}
                     <div className="pt-4 flex flex-col space-y-3 mt-4">
-                        <button onClick={() => { setAppState("START"); setAnswers([]); setCurrentIndex(0); setGender(null); setBirthYear(""); setBirthMonth(""); setBirthDay(""); }} className="p-3 w-full bg-[#111] hover:bg-[#222] border border-gray-700 rounded-xl text-white font-bold transition-all text-sm">
+                        <button onClick={() => { setAppState("START"); setAnswers([]); setCurrentIndex(0); setGender(null); setBirthYear(""); setBirthMonth(""); setBirthDay(""); setMbti(""); }} className="p-3 w-full bg-[#111] hover:bg-[#222] border border-gray-700 rounded-xl text-white font-bold transition-all text-sm">
                             もう一度診断する
                         </button>
                         <Link href="/" className="p-3 w-full flex items-center justify-center bg-[#111] hover:bg-[#222] border border-gray-700 rounded-xl text-white font-bold transition-all text-sm">
@@ -640,7 +672,7 @@ export default function JiraiDiagnosisPage() {
                 )}
 
                 {/* Hidden Share Card for Instagram / TikTok (9:16 Aspect Ratio) */}
-                <div className="absolute left-0 top-0 -z-50 opacity-0 pointer-events-none overflow-hidden">
+                <div className="absolute top-[-9999px] left-[-9999px] -z-50 opacity-100 pointer-events-none overflow-hidden">
                     <div
                         id="share-card"
                         className="w-[1080px] h-[1920px] bg-[#050505] text-white p-16 flex flex-col items-center justify-center font-sans z-0"
