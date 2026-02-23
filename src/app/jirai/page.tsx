@@ -46,6 +46,17 @@ const RESULTS = [
     { code: "HSMB", title: "電脳世界の地雷将軍", subtitle: "HSMB", catchphrase: "監視、束縛、病み、全てを網羅した完全武装のラスボス。", image: "/jirai/cyber_general.png", description: "12の質問全てに当てはまる勢いの、圧倒的ポテンシャルを秘めた逸材。SNSを駆使した恐るべき情報収集能力と、逃げ場をなくすほどの重い愛情を兼ね備えています。一度愛した相手は絶対に逃がさない、JININが誇る最強の地雷です。", color: "pink", bestMatch: "LTCS", worstMatch: "HTCB" }
 ];
 
+// 1. 端末・OS情報を判定する関数を追加
+const getDeviceInfo = () => {
+    if (typeof window === 'undefined') return "Unknown";
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+    if (/Android/i.test(ua)) return "Android";
+    if (/Mac/i.test(ua)) return "Mac";
+    if (/Windows/i.test(ua)) return "Windows";
+    return "Other";
+};
+
 type AppState = "START" | "DIAGNOSIS" | "ATTRIBUTES" | "RESULT";
 
 export default function JiraiDiagnosisPage() {
@@ -61,6 +72,7 @@ export default function JiraiDiagnosisPage() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [base64Avatar, setBase64Avatar] = useState<string>("");
     const [base64Logo, setBase64Logo] = useState<string>("");
+    const [startTime, setStartTime] = useState<string>("");
 
     useEffect(() => {
         // Enforce an aggressive top-scroll alignment to combat Safari's scroll retention on React re-renders.
@@ -87,6 +99,7 @@ export default function JiraiDiagnosisPage() {
     }, [appState]);
 
     const handleStart = () => {
+        setStartTime(new Date().toLocaleString('ja-JP'));
         setAppState("DIAGNOSIS");
     };
 
@@ -194,27 +207,24 @@ export default function JiraiDiagnosisPage() {
         const formattedBirthMonth = birthMonth.padStart(2, '0');
         const formattedBirthDay = birthDay.padStart(2, '0');
 
+        const regionInfo = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
         const payload = {
             sheetName: "隠れ地雷度診断",
             data: {
                 diagnosisDate: diagnosisDate,
-                diagnosisTime: diagnosisTime,
+                diagnosisStartTime: startTime,
+                diagnosisEndTime: new Date().toLocaleString('ja-JP'),
+                regionInfo: regionInfo,
                 birthDate: `${birthYear}/${formattedBirthMonth}/${formattedBirthDay}`,
                 gender: gender,
-                q1: !!answers[0],
-                q2: !!answers[1],
-                q3: !!answers[2],
-                q4: !!answers[3],
-                q5: !!answers[4],
-                q6: !!answers[5],
-                q7: !!answers[6],
-                q8: !!answers[7],
-                q9: !!answers[8],
-                q10: !!answers[9],
-                q11: !!answers[10],
-                q12: !!answers[11],
+                mbti: mbti || "未回答",
                 resultType: result.title,
-                mbti: mbti || "未回答"
+                deviceInfo: getDeviceInfo(),
+                q1: !!answers[0], q2: !!answers[1], q3: !!answers[2],
+                q4: !!answers[3], q5: !!answers[4], q6: !!answers[5],
+                q7: !!answers[6], q8: !!answers[7], q9: !!answers[8],
+                q10: !!answers[9], q11: !!answers[10], q12: !!answers[11]
             }
         };
 
