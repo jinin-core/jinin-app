@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { toJpeg } from "html-to-image";
 import { NeonButton } from "@/components/NeonButton";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SwipeCard } from "@/components/SwipeCard";
@@ -69,11 +68,7 @@ export default function JiraiDiagnosisPage() {
     const [birthMonth, setBirthMonth] = useState<string>("");
     const [birthDay, setBirthDay] = useState<string>("");
     const [mbti, setMbti] = useState<string>("");
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [base64Avatar, setBase64Avatar] = useState<string>("");
-    const [base64Logo, setBase64Logo] = useState<string>("");
     const [startTime, setStartTime] = useState<string>("");
-    const [shareModalImage, setShareModalImage] = useState<string | null>(null);
 
     useEffect(() => {
         // Enforce an aggressive top-scroll alignment to combat Safari's scroll retention on React re-renders.
@@ -148,25 +143,14 @@ export default function JiraiDiagnosisPage() {
             const result = getResult();
             const baseUrl = window.location.origin;
 
-            // Prefetch Avatar
-            fetch(`${baseUrl}${result.image}`)
-                .then(res => res.blob())
-                .then(blob => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => setBase64Avatar(reader.result as string);
-                    reader.readAsDataURL(blob);
-                })
-                .catch(err => console.error("Avatar fetch error:", err));
-
-            // Prefetch Top Logo
-            fetch(`${baseUrl}/jinin_logo.png`)
-                .then(res => res.blob())
-                .then(blob => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => setBase64Logo(reader.result as string);
-                    reader.readAsDataURL(blob);
-                })
-                .catch(err => console.error("Logo fetch error:", err));
+            // GA4 Page View (Result Screen)
+            if (typeof window !== 'undefined' && (window as any).gtag) {
+                (window as any).gtag('event', 'page_view', {
+                    page_title: `JININ結果: ${result.title}`,
+                    page_location: window.location.href,
+                    page_path: '/jirai/result/' + result.code.toLowerCase()
+                });
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [appState]);
@@ -289,88 +273,12 @@ export default function JiraiDiagnosisPage() {
     const shareToTwitter = () => {
         const result = getResult();
         const yesPercentage = Math.round((answers.filter(a => a).length / QUESTIONS.length) * 100);
-        const text = `私の隠れ地雷度は${yesPercentage}%、タイプは【${result.title}】でした！\n\n私も知らない私をJININ👉 https://jinin.example.com/jirai\n#JININ #隠れ地雷度診断`;
+        const text = `私の隠れ地雷度は${yesPercentage}%、タイプは【${result.title}】でした！\n\n誰も知らない「私」をJININ👉 https://jinin.example.com/jirai\n#JININ #隠れ地雷度診断`;
         const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
         window.open(url, "_blank");
     };
 
-    const handleNativeShare = async () => {
-        // GA4: Track share event
-        if (typeof window !== 'undefined' && (window as any).gtag) {
-            (window as any).gtag('event', 'share_result');
-        }
 
-        const element = document.getElementById("share-card");
-        if (!element) return;
-
-        try {
-            setIsGenerating(true);
-
-            // html2canvas workaround: Temporarily move the element onto the screen so it isn't cropped or ignored by iOS WebKit
-            const originalStyle = element.style.cssText;
-            element.style.position = 'fixed';
-            element.style.top = '0';
-            element.style.left = '0';
-            element.style.zIndex = '-9999';
-            element.style.transform = 'none';
-
-            // Give a slight delay for DOM to settle
-            await new Promise(r => setTimeout(r, 100));
-
-            const dataUrl = await toJpeg(element, {
-                quality: 0.85,
-                backgroundColor: "#050505",
-                canvasWidth: 1080,
-                canvasHeight: 1920,
-                style: {
-                    transform: 'scale(1)',
-                    transformOrigin: 'top left'
-                }
-            });
-
-            element.style.cssText = originalStyle;
-
-            const result = getResult();
-            const fileName = `jinin_${result.code}.jpg`;
-
-            // Safe Blob conversion that avoids "Failed to fetch data: URL" bugs in WebKit WebViews
-            const byteString = atob(dataUrl.split(',')[1]);
-            const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
-            const ab = new ArrayBuffer(byteString.length);
-            const ia = new Uint8Array(ab);
-            for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i);
-            }
-            const blob = new Blob([ab], { type: mimeString });
-            const file = new File([blob], fileName, { type: mimeString });
-
-            const shareData = {
-                title: 'JININ - 隠れ地雷度診断',
-                text: `私の地雷タイプは【${result.title}】でした！\n「${result.catchphrase}」\n#JININ #隠れ地雷度診断\nhttps://jinin.example.com/jirai`,
-                files: [file]
-            };
-
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                try {
-                    await navigator.share(shareData);
-                } catch (err) {
-                    if ((err as Error).name !== "AbortError") {
-                        // User cancelled share, don't show fallback, unless it's a real error
-                        setShareModalImage(dataUrl);
-                    }
-                }
-            } else {
-                // Fallback Modal for Desktop / Unsupported environments
-                setShareModalImage(dataUrl);
-            }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            console.error("画像生成エラー:", errorMessage);
-            alert(`画像シェアの準備に失敗しました。\n詳細: ${errorMessage}`);
-        } finally {
-            setIsGenerating(false);
-        }
-    };
 
     if (appState === "START") {
         return (
@@ -699,27 +607,11 @@ export default function JiraiDiagnosisPage() {
                     {/* Primary Share Actions */}
                     <div className="flex flex-col space-y-3 mb-2">
                         <button
-                            onClick={handleNativeShare}
-                            disabled={isGenerating || !base64Avatar || !base64Logo}
-                            className={`flex items-center justify-center space-x-2 py-4 bg-[#1f0a1f] border-2 border-neon-pink rounded-xl text-white font-black tracking-wide transition-all box-glow-pink hover:bg-[#3f1f3f] group ${(isGenerating || !base64Avatar || !base64Logo) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <Share2 size={20} className={(isGenerating || !base64Avatar || !base64Logo) ? '' : 'group-hover:animate-bounce'} />
-                            <span>
-                                {(!base64Avatar || !base64Logo) ? '画像準備中...' :
-                                    isGenerating ? '画像生成中...' : '📸 結果をシェアする'}
-                            </span>
-                        </button>
-
-                        <button
                             onClick={shareToTwitter}
                             className="flex items-center justify-center space-x-2 py-4 bg-black border-2 border-gray-700 hover:border-white rounded-xl text-white font-black tracking-widest transition-all hover:bg-white hover:text-black group"
                         >
                             <Twitter size={20} />
                             <span>𝕏 結果をXでポストする</span>
-                        </button>
-
-                        <button onClick={copyUrl} className="flex items-center justify-center space-x-2 py-3 bg-transparent border border-gray-800 hover:border-gray-500 rounded-lg text-gray-400 hover:text-white font-bold transition-all text-xs">
-                            <span className="text-xs">隠れ地雷度診断のURLをコピー</span>
                         </button>
                     </div>
 
@@ -774,117 +666,7 @@ export default function JiraiDiagnosisPage() {
                     </div>
                 )}
 
-                {/* Native Share Fallback Modal */}
-                {shareModalImage && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md" onClick={() => setShareModalImage(null)}>
-                        <div
-                            className="bg-[#0a0a0a] border border-gray-800 rounded-2xl w-full max-w-sm p-6 relative flex flex-col items-center"
-                            style={{ boxShadow: '0 0 40px rgba(255,0,255,0.4)' }}
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <button onClick={() => setShareModalImage(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white bg-black/50 rounded-full p-2 border border-gray-800 transition-colors">
-                                <X size={20} />
-                            </button>
-                            <h3 className="text-lg font-black text-neon-pink mb-2 text-center animate-pulse text-glow-pink">画像を長押しして保存</h3>
-                            <p className="text-xs text-gray-300 text-center mb-6 leading-relaxed">
-                                あなたの端末では直接シェアがサポートされていません。<br />
-                                以下の画像を<strong>「写真に追加（保存）」</strong>してから、InstagramやTikTokでシェアしてね📸✨
-                            </p>
-                            <div className="relative w-full aspect-[9/16] rounded-xl overflow-hidden border-2 border-neon-cyan shadow-lg mb-4 bg-black">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={shareModalImage} alt="Share Result" className="w-full h-full object-contain" />
-                            </div>
-                            <button onClick={() => setShareModalImage(null)} className="w-full py-4 bg-[#111] hover:bg-[#222] border border-gray-700 rounded-xl text-white font-bold transition-all text-sm">
-                                閉じる
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Hidden Share Card for Instagram / TikTok (9:16 Aspect Ratio) */}
-                <div className="absolute top-[-9999px] left-[-9999px] -z-50 opacity-100 pointer-events-none overflow-hidden">
-                    <div
-                        id="share-card"
-                        className="w-[1080px] h-[1920px] bg-[#050505] text-white p-16 flex flex-col items-center justify-between font-sans z-0 relative"
-                    >
-                        {/* Background Elements - Using safe rgba/hex instead of space-separated gradients or modern color specs */}
-                        <div className="absolute inset-0 z-0 opacity-50" style={{ background: 'radial-gradient(ellipse at center, rgba(255,0,255,0.15) 0%, rgba(0,0,0,0) 70%)' }}></div>
-                        <div className="absolute inset-0 z-0 opacity-40" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,0.03) 2px, transparent 2px)', backgroundSize: '60px 60px' }}></div>
-
-                        <div className="relative z-10 w-full flex-grow flex flex-col items-center justify-center pt-12 pb-8 gap-y-12">
-                            {/* Logo */}
-                            <div className="w-[450px] relative flex flex-col items-center mt-8">
-                                <div
-                                    className="w-full h-[150px]"
-                                    style={{
-                                        backgroundImage: `url(${base64Logo || "/jinin_logo.png"})`,
-                                        backgroundSize: 'contain',
-                                        backgroundPosition: 'center',
-                                        backgroundRepeat: 'no-repeat',
-                                        filter: 'drop-shadow(0px 0px 20px rgba(0,255,255,0.3))'
-                                    }}
-                                />
-                                <p
-                                    className="text-[24px] text-neon-cyan font-mono font-black tracking-[0.6em] mt-6"
-                                    style={{ filter: 'drop-shadow(0px 0px 8px rgba(0,255,255,0.8))' }}
-                                >
-                                    #隠れ地雷度診断
-                                </p>
-                            </div>
-
-                            {/* Character Image */}
-                            <div
-                                className="relative w-[750px] h-[750px] shrink-0 rounded-full overflow-hidden bg-[#0A0A0A] z-20 border-[12px] border-gray-900 border-b-neon-pink"
-                                style={{ boxShadow: '0px 0px 80px rgba(255,0,255,0.4)' }}
-                            >
-                                <div
-                                    className="w-full h-full"
-                                    style={{
-                                        backgroundImage: `url(${base64Avatar || result.image})`,
-                                        backgroundSize: 'cover',
-                                        backgroundPosition: 'center',
-                                        backgroundRepeat: 'no-repeat',
-                                    }}
-                                />
-                            </div>
-
-                            {/* Result Title */}
-                            <div className="text-center px-12 mt-4">
-                                <h1
-                                    className="text-7xl font-black mb-8 leading-tight text-neon-pink"
-                                    style={{ filter: 'drop-shadow(0px 0px 15px rgba(255,0,255,0.6))' }}
-                                >
-                                    {result.title}
-                                </h1>
-                                <div
-                                    className="inline-block px-12 py-6 bg-[#111] border-[6px] border-gray-800 rounded-full"
-                                    style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}
-                                >
-                                    <p className="text-4xl font-bold text-gray-300">
-                                        地雷度 <span className="text-6xl ml-6 font-black text-neon-pink">{yesPercentage}%</span>
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Footer (Catchphrase) */}
-                            <div className="w-full text-center px-16 mt-6">
-                                <p
-                                    className="text-4xl font-bold leading-[1.8] text-gray-200 whitespace-pre-wrap break-words"
-                                    style={{ filter: 'drop-shadow(0 10px 8px rgba(0,0,0,0.4))' }}
-                                >
-                                    {result.catchphrase}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Bottom URL Bar */}
-                        <div className="relative z-10 w-full mb-8 pt-8 border-t-[3px] border-gray-800 flex flex-col items-center justify-center">
-                            <p className="text-[32px] font-mono font-bold text-gray-400 tracking-widest">
-                                https://jinin.example.com/jirai
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                {/* Component ends here. Off-screen DOM completely removed. */}
             </div>
         );
     }
